@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Password Strength Checker</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f5f5f5;
+}
+.container {
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+.input-group {
+    margin: 20px 0;
+}
+input {
+    padding: 10px;
+    width: 300px;
+    margin: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+button {
+    padding: 10px 20px;
+    cursor: pointer;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    margin: 5px;
+}
+button:hover {
+    background-color: #45a049;
+}
+.result {
+    margin-top: 20px;
+    padding: 15px;
+    border-radius: 4px;
+}
+.error {
+    color: #721c24;
+    background-color: #f8d7da;
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 4px;
+}
+.deduction {
+    color: #856404;
+    background-color: #fff3cd;
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 4px;
+}
+.strength {
+    font-size: 1.2em;
+    margin: 10px 0;
+}
+.stored-passwords {
+    margin-top: 20px;
+}
+.password-entry {
+    padding: 10px;
+    border: 1px solid #ddd;
+    margin: 5px 0;
+    border-radius: 4px;
+}
+
+.show-password-container {
+    display: flex;  
+    align-items: center; 
+    gap: 5px; 
+}
+
+.show-password-container input[type="checkbox"] {
+    margin: 0; 
+    width: 16px;
+    height: 16px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Password Strength Checker</h2>
+    
+    <div class="input-group">
+        <input type="password" id="password" placeholder="Enter your password">
+        <button onclick="checkPassword()">Check Strength</button>
+        <button onclick="storePassword()">Store Password</button>
+    </div>
+    
+    <!-- ✅ New "Show Password" checkbox -->
+    <div>
+        <input type="checkbox" id="showPassword" onclick="togglePasswordVisibility()"> 
+        <label for="showPassword">Show Password</label>
+    </div>
+
+    <div class="result" id="result"></div>
+</div>
+
+<div class="container">
+    <h3>Stored Passwords</h3>
+    <input type="text" id="username" placeholder="Enter username">
+    <input type="password" id="userPassword" placeholder="Enter password">
+    <button onclick="getStoredPasswords()">View Stored Passwords</button>
+    <div id="storedPasswords" class="stored-passwords"></div>
+</div>
+
+<script>
+function togglePasswordVisibility() {
+    let passwordField = document.getElementById("password");
+    let showPasswordCheckbox = document.getElementById("showPassword");
+    passwordField.type = showPasswordCheckbox.checked ? "text" : "password";
+}
+
+async function checkPassword() {
+    let password = document.getElementById("password").value;
+    try {
+        let response = await fetch("/check_password", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password })
+        });
+
+        let data = await response.json();
+        displayResults(data);
+    } catch (error) {
+        console.error("Error:", error);
+        document.getElementById("result").innerHTML = 
+            `<div class="error">Error connecting to server</div>`;
+    }
+}
+
+async function storePassword() {
+    let password = document.getElementById("password").value;
+    try {
+        let response = await fetch("/store_password", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password })
+        });
+
+        let data = await response.json();
+        alert(data.message);
+        if (response.ok) {
+            getStoredPasswords();  // Refresh the password list
+        }
+    } catch (error) {
+        console.error("Error:", error);
+        alert("Error storing password");
+    }
+}
+
+async function getStoredPasswords() {
+    let username = document.getElementById("username").value;
+    let password = document.getElementById("userPassword").value;
+
+    if (!username || !password) {
+        alert("Please enter username and password.");
+        return;
+    }
+
+    try {
+        let response = await fetch("/get_passwords", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        });
+
+        let data = await response.json();
+
+        if (!response.ok) {
+            document.getElementById("storedPasswords").innerHTML = 
+                `<div class="error">${data.message}</div>`;
+            return;
+        }
+
+        let storedDiv = document.getElementById("storedPasswords");
+        if (data.length === 0) {
+            storedDiv.innerHTML = "<p>No passwords stored yet.</p>";
+            return;
+        }
+
+        storedDiv.innerHTML = "";
+        data.forEach(p => {
+            storedDiv.innerHTML += `
+                <div class="password-entry">
+                    ID: ${p.id}<br>
+                    Hash: ${p.hash}
+                </div>`;
+        });
+    } catch (error) {
+        console.error("Error:", error);
+        document.getElementById("storedPasswords").innerHTML = 
+            `<div class="error">Error fetching stored passwords</div>`;
+    }
+}
+
+function displayResults(data) {
+    let resultDiv = document.getElementById("result");
+    let html = `
+        <div class="strength">
+            Strength Score: ${data.score}/10 (${data.strength})
+        </div>`;
+
+    if (data.deductions.length > 0) {
+        html += "<h3>Areas for Improvement:</h3>";
+        data.deductions.forEach(deduction => {
+            html += `<div class="deduction">• ${deduction}</div>`;
+        });
+    }
+
+    if (data.errors.length > 0) {
+        html += "<h3>Requirements Not Met:</h3>";
+        data.errors.forEach(error => {
+            html += `<div class="error">• ${error}</div>`;
+        });
+    }
+
+    resultDiv.innerHTML = html;
+}
+</script>
+
+</body>
+</html>
